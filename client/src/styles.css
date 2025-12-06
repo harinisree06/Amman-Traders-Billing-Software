@@ -1,0 +1,25 @@
+:root{ --gray:#e5e7eb; --dark:#111827; --light:#f9fafb; --primary:#111827 }
+*{ box-sizing:border-box }
+html,body,#root{ height:100% }
+body{ margin:0; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--light); color:var(--dark) }
+.container{ max-width:1150px; margin:20px auto; padding:16px }
+.card{ background:#fff; border:1px solid var(--gray); border-radius:8px; padding:16px }
+.row{ display:flex; gap:12px; flex-wrap:wrap }
+.col{ flex:1 1 300px }
+label{ font-size:12px; color:#4b5563 }
+input,select,textarea{ width:100%; padding:8px 10px; border:1px solid var(--gray); border-radius:6px; background:white }
+table{ width:100%; border-collapse:collapse }
+th,td{ border:1px solid var(--gray); padding:8px; font-size:14px }
+th{ background:#f3f4f6; text-align:left }
+.btn{ background:#111827; color:#fff; border:none; padding:10px 14px; border-radius:6px; cursor:pointer }
+.btn.secondary{ background:#374151 }
+.right{ text-align:right }
+.printable{ background:#fff; padding:16px; border:1px solid var(--gray) }
+/* A4-like width for print */
+@media print{
+  .printable{ width: 210mm; min-height: 297mm; margin: 0 auto; padding: 12mm; border: none }
+  table{ page-break-inside: avoid }
+}
+@media print{ .no-print{ display:none !important } body{ background:#fff } .container{ margin:0; padding:0 } }
+
+
