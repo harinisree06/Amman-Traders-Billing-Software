@@ -180,11 +180,11 @@ app.post('/api/invoices', async (req, res) => {
       totals,
     }
     
-    let record
+    let record: any
     if (data.save) {
-      record = await Invoice.create(invoiceData)
-      record = record.toObject()
-      record.id = record._id.toString()
+      const created = await Invoice.create(invoiceData)
+      record = created.toObject() as any
+      record.id = created._id.toString()
     } else {
       // Return without saving
       record = {
@@ -208,9 +208,9 @@ app.get('/api/invoices/:id', async (req, res) => {
   try {
     const inv = await Invoice.findById(req.params.id)
     if (!inv) return res.status(404).json({ error: 'Not found' })
-    const invoice = inv.toObject()
-    invoice.id = invoice._id.toString()
-    res.json(invoice)
+    const invoice: any = inv.toObject()
+    invoice.id = inv._id.toString()
+    res.json(invoice as any)
   } catch (error) {
     console.error('Error fetching invoice:', error)
     res.status(500).json({ error: 'Failed to fetch invoice' })
@@ -221,11 +221,11 @@ app.get('/api/invoices', async (_req, res) => {
   try {
     const invoices = await Invoice.find().sort({ createdAt: -1 })
     const list = invoices.map(inv => {
-      const invoice = inv.toObject()
-      invoice.id = invoice._id.toString()
+      const invoice: any = inv.toObject()
+      invoice.id = inv._id.toString()
       return invoice
     })
-    res.json(list)
+    res.json(list as any)
   } catch (error) {
     console.error('Error fetching invoices:', error)
     res.status(500).json({ error: 'Failed to fetch invoices' })
@@ -236,11 +236,11 @@ app.get('/api/get_bill_details', async (_req, res) => {
   try {
     const invoices = await Invoice.find().sort({ createdAt: -1 })
     const list = invoices.map(inv => {
-      const invoice = inv.toObject()
-      invoice.id = invoice._id.toString()
+      const invoice: any = inv.toObject()
+      invoice.id = inv._id.toString()
       return invoice
     })
-    res.json({ success: true, data: list })
+    res.json({ success: true, data: list as any })
   } catch (error) {
     console.error('Error fetching bills:', error)
     res.status(500).json({ error: 'Failed to fetch bills' })
