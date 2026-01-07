@@ -37,6 +37,7 @@ export function App() {
           taxes: { cgstRate, sgstRate, igstRate },
           billType,
           date,
+          billNumber: billNumber || undefined,
           billToState,
           billToTaxIdLabel,
           billToTaxIdValue,
@@ -50,9 +51,10 @@ export function App() {
         }
         alert(`✅ Bill saved successfully! Bill Number: ${res.data.billNumber || 'N/A'}`)
       }
-    } catch (err) {
+      } catch (err: any) {
       console.error('Failed to save invoice, continuing to generate PDF...', err)
-      alert('❌ Failed to save bill, but PDF will still be generated.')
+      const errorMsg = err?.response?.data?.error || 'Failed to save bill'
+      alert(`❌ ${errorMsg}. PDF will still be generated.`)
     }
 
     const target = printRef.current
@@ -146,6 +148,16 @@ export function App() {
           <div className="col">
             <label>Date:</label>
             <input type="date" value={date} onChange={(e)=>set({ date: e.target.value })} />
+          </div>
+          <div className="col">
+            <label>Bill Number:</label>
+            <input 
+              type="text" 
+              value={billNumber || ''} 
+              onChange={(e)=>set({ billNumber: e.target.value || undefined })} 
+              placeholder="Auto-generated if empty"
+              style={{ fontSize: 13 }}
+            />
           </div>
           <div className="col">
             <label>Save:</label>

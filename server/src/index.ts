@@ -130,9 +130,29 @@ app.post('/api/invoices', (req, res) => {
     return res.status(400).json({ error: parsed.error.format() })
   }
   const data = parsed.data
+  
+  // Check if custom bill number is provided in request body
+  const customBillNumber = (req.body as any).billNumber
+  
+  let billNumber: string | undefined = undefined
+  if (data.save) {
+    if (customBillNumber && customBillNumber.trim()) {
+      // Use custom bill number if provided
+      invoices = loadInvoices()
+      // Check if bill number already exists
+      const existingBill = Object.values(invoices).find(inv => inv.billNumber === customBillNumber.trim())
+      if (existingBill) {
+        return res.status(400).json({ error: 'Bill number already exists. Please use a different number.' })
+      }
+      billNumber = customBillNumber.trim()
+    } else {
+      // Auto-generate if not provided
+      billNumber = generateBillNumber()
+    }
+  }
+  
   const totals = calculateTotals(data)
   const id = Date.now().toString()
-  const billNumber = data.save ? generateBillNumber() : undefined
   const record: Invoice = { ...data, billNumber, totals, id, createdAt: new Date().toISOString() }
   if (data.save) {
     invoices[id] = record
