@@ -1,44 +1,19 @@
 import express from 'express'
 import cors from 'cors'
 import { z } from 'zod'
-import fs from 'fs'
-import path from 'path'
+import mongoose from 'mongoose'
 
 const app = express()
 app.use(cors())
 app.use(express.json())
 
-// File path for storing invoices
-const DATA_DIR = path.join(process.cwd(), 'data')
-const INVOICES_FILE = path.join(DATA_DIR, 'invoices.json')
+// MongoDB connection
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/billing'
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('✅ Connected to MongoDB'))
+  .catch((err) => console.error('❌ MongoDB connection error:', err))
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true })
-}
-
-// Load invoices from file
-function loadInvoices(): Record<string, Invoice> {
-  try {
-    if (fs.existsSync(INVOICES_FILE)) {
-      const data = fs.readFileSync(INVOICES_FILE, 'utf-8')
-      return JSON.parse(data)
-    }
-  } catch (error) {
-    console.error('Error loading invoices:', error)
-  }
-  return {}
-}
-
-// Save invoices to file
-function saveInvoices(invoices: Record<string, Invoice>) {
-  try {
-    fs.writeFileSync(INVOICES_FILE, JSON.stringify(invoices, null, 2), 'utf-8')
-  } catch (error) {
-    console.error('Error saving invoices:', error)
-  }
-}
-
+// MongoDB Schema
 const ItemSchema = z.object({
   description: z.string(),
   hsn: z.string().optional().default(''),
@@ -54,12 +29,11 @@ const PartySchema = z.object({
   gstin: z.string().optional().default(''),
 })
 
-const InvoiceSchema = z.object({
+const InvoiceDataSchema = z.object({
   billTo: PartySchema,
   shipTo: PartySchema,
   items: z.array(ItemSchema),
   taxes: z.object({ cgstRate: z.number(), sgstRate: z.number(), igstRate: z.number() }),
-  // optional meta fields mirrored from client
   billType: z.string().optional(),
   date: z.string().optional(),
   billToState: z.string().optional(),
@@ -72,11 +46,63 @@ const InvoiceSchema = z.object({
   save: z.boolean().default(false),
 })
 
-type Invoice = z.infer<typeof InvoiceSchema> & { id: string; billNumber?: string; totals: any; createdAt: string }
+type InvoiceData = z.infer<typeof InvoiceDataSchema>
 
-let invoices: Record<string, Invoice> = loadInvoices()
+// Mongoose Model
+const InvoiceSchema = new mongoose.Schema({
+  billTo: {
+    name: String,
+    address1: String,
+    phone: String,
+    gstin: String,
+  },
+  shipTo: {
+    name: String,
+    address1: String,
+    phone: String,
+    gstin: String,
+  },
+  items: [{
+    description: String,
+    hsn: String,
+    quantity: Number,
+    rate: Number,
+    per: String,
+  }],
+  taxes: {
+    cgstRate: Number,
+    sgstRate: Number,
+    igstRate: Number,
+  },
+  billType: String,
+  date: String,
+  billNumber: String,
+  billToState: String,
+  billToTaxIdLabel: String,
+  billToTaxIdValue: String,
+  shipToPhone: String,
+  transport: {
+    parcelDetails: String,
+    numberOfBags: Number,
+    lrNumber: String,
+    transportName: String,
+  },
+  totals: {
+    subTotal: Number,
+    cgst: Number,
+    sgst: Number,
+    igst: Number,
+    total: Number,
+  },
+  createdAt: { type: Date, default: Date.now },
+})
 
-function calculateTotals(inv: z.infer<typeof InvoiceSchema>) {
+// Create unique index on billNumber
+InvoiceSchema.index({ billNumber: 1 }, { unique: true, sparse: true })
+
+const Invoice = mongoose.model('Invoice', InvoiceSchema)
+
+function calculateTotals(inv: InvoiceData) {
   const subTotal = inv.items.reduce((s, it) => s + it.quantity * it.rate, 0)
   const cgst = (subTotal * inv.taxes.cgstRate) / 100
   const sgst = (subTotal * inv.taxes.sgstRate) / 100
@@ -85,115 +111,154 @@ function calculateTotals(inv: z.infer<typeof InvoiceSchema>) {
   return { subTotal, cgst, sgst, igst, total }
 }
 
-function generateBillNumber(): string {
-  invoices = loadInvoices()
-  
-  // Get all saved invoices with bill numbers
-  const usedNumbers = new Set<number>()
-  Object.values(invoices).forEach(inv => {
-    if (inv.billNumber) {
-      // Parse bill number - it should be a simple number like "1", "2", "3"
-      const num = parseInt(inv.billNumber, 10)
-      if (!isNaN(num) && num > 0) {
-        usedNumbers.add(num)
+async function generateBillNumber(): Promise<string> {
+  try {
+    const invoices = await Invoice.find({ billNumber: { $exists: true, $ne: null } }).select('billNumber')
+    
+    const usedNumbers = new Set<number>()
+    invoices.forEach(inv => {
+      if (inv.billNumber) {
+        const num = parseInt(inv.billNumber, 10)
+        if (!isNaN(num) && num > 0) {
+          usedNumbers.add(num)
+        }
+      }
+    })
+    
+    let nextNumber = 1
+    if (usedNumbers.size > 0) {
+      const maxNumber = Math.max(...Array.from(usedNumbers))
+      for (let i = 1; i <= maxNumber; i++) {
+        if (!usedNumbers.has(i)) {
+          nextNumber = i
+          break
+        }
+      }
+      if (nextNumber === 1 && usedNumbers.has(1)) {
+        nextNumber = maxNumber + 1
       }
     }
-  })
-  
-  // Find the first available number (starting from 1)
-  // If there are gaps (e.g., 1, 3, 5), use the first gap
-  // Otherwise, use the next number after the max
-  let nextNumber = 1
-  if (usedNumbers.size > 0) {
-    const maxNumber = Math.max(...Array.from(usedNumbers))
-    // Find first gap
-    for (let i = 1; i <= maxNumber; i++) {
-      if (!usedNumbers.has(i)) {
-        nextNumber = i
-        break
-      }
-    }
-    // If no gap found, use maxNumber + 1
-    if (nextNumber === 1 && usedNumbers.has(1)) {
-      nextNumber = maxNumber + 1
-    }
+    
+    return nextNumber.toString()
+  } catch (error) {
+    console.error('Error generating bill number:', error)
+    return '1'
   }
-  
-  return nextNumber.toString()
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true }))
+app.get('/health', (_req, res) => res.json({ ok: true, db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' }))
 
-app.post('/api/invoices', (req, res) => {
-  const parsed = InvoiceSchema.safeParse(req.body)
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.format() })
-  }
-  const data = parsed.data
-  
-  // Check if custom bill number is provided in request body
-  const customBillNumber = (req.body as any).billNumber
-  
-  let billNumber: string | undefined = undefined
-  if (data.save) {
-    if (customBillNumber && customBillNumber.trim()) {
-      // Use custom bill number if provided
-      invoices = loadInvoices()
-      // Check if bill number already exists
-      const existingBill = Object.values(invoices).find(inv => inv.billNumber === customBillNumber.trim())
-      if (existingBill) {
-        return res.status(400).json({ error: 'Bill number already exists. Please use a different number.' })
-      }
-      billNumber = customBillNumber.trim()
-    } else {
-      // Auto-generate if not provided
-      billNumber = generateBillNumber()
+app.post('/api/invoices', async (req, res) => {
+  try {
+    const parsed = InvoiceDataSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.format() })
     }
+    const data = parsed.data
+    
+    const customBillNumber = (req.body as any).billNumber
+    
+    let billNumber: string | undefined = undefined
+    if (data.save) {
+      if (customBillNumber && customBillNumber.trim()) {
+        // Check if bill number already exists
+        const existingBill = await Invoice.findOne({ billNumber: customBillNumber.trim() })
+        if (existingBill) {
+          return res.status(400).json({ error: 'Bill number already exists. Please use a different number.' })
+        }
+        billNumber = customBillNumber.trim()
+      } else {
+        // Auto-generate if not provided
+        billNumber = await generateBillNumber()
+      }
+    }
+    
+    const totals = calculateTotals(data)
+    const invoiceData = {
+      ...data,
+      billNumber,
+      totals,
+    }
+    
+    let record
+    if (data.save) {
+      record = await Invoice.create(invoiceData)
+      record = record.toObject()
+      record.id = record._id.toString()
+    } else {
+      // Return without saving
+      record = {
+        ...invoiceData,
+        id: Date.now().toString(),
+        createdAt: new Date().toISOString(),
+      }
+    }
+    
+    res.json(record)
+  } catch (error: any) {
+    console.error('Error saving invoice:', error)
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'Bill number already exists. Please use a different number.' })
+    }
+    res.status(500).json({ error: 'Failed to save invoice' })
   }
-  
-  const totals = calculateTotals(data)
-  const id = Date.now().toString()
-  const record: Invoice = { ...data, billNumber, totals, id, createdAt: new Date().toISOString() }
-  if (data.save) {
-    invoices[id] = record
-    saveInvoices(invoices)
+})
+
+app.get('/api/invoices/:id', async (req, res) => {
+  try {
+    const inv = await Invoice.findById(req.params.id)
+    if (!inv) return res.status(404).json({ error: 'Not found' })
+    const invoice = inv.toObject()
+    invoice.id = invoice._id.toString()
+    res.json(invoice)
+  } catch (error) {
+    console.error('Error fetching invoice:', error)
+    res.status(500).json({ error: 'Failed to fetch invoice' })
   }
-  res.json(record)
 })
 
-app.get('/api/invoices/:id', (req, res) => {
-  const inv = invoices[req.params.id]
-  if (!inv) return res.status(404).json({ error: 'Not found' })
-  res.json(inv)
-})
-
-app.get('/api/invoices', (_req, res) => {
-  // Reload from file to ensure we have latest data
-  invoices = loadInvoices()
-  const list = Object.values(invoices).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-  res.json(list)
-})
-
-// Endpoint similar to the reference API structure
-app.get('/api/get_bill_details', (_req, res) => {
-  invoices = loadInvoices()
-  const list = Object.values(invoices).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-  res.json({ success: true, data: list })
-})
-
-// Delete invoice endpoint
-app.delete('/api/invoices/:id', (req, res) => {
-  invoices = loadInvoices()
-  const id = req.params.id
-  if (!invoices[id]) {
-    return res.status(404).json({ error: 'Invoice not found' })
+app.get('/api/invoices', async (_req, res) => {
+  try {
+    const invoices = await Invoice.find().sort({ createdAt: -1 })
+    const list = invoices.map(inv => {
+      const invoice = inv.toObject()
+      invoice.id = invoice._id.toString()
+      return invoice
+    })
+    res.json(list)
+  } catch (error) {
+    console.error('Error fetching invoices:', error)
+    res.status(500).json({ error: 'Failed to fetch invoices' })
   }
-  delete invoices[id]
-  saveInvoices(invoices)
-  res.json({ success: true, message: 'Invoice deleted successfully' })
+})
+
+app.get('/api/get_bill_details', async (_req, res) => {
+  try {
+    const invoices = await Invoice.find().sort({ createdAt: -1 })
+    const list = invoices.map(inv => {
+      const invoice = inv.toObject()
+      invoice.id = invoice._id.toString()
+      return invoice
+    })
+    res.json({ success: true, data: list })
+  } catch (error) {
+    console.error('Error fetching bills:', error)
+    res.status(500).json({ error: 'Failed to fetch bills' })
+  }
+})
+
+app.delete('/api/invoices/:id', async (req, res) => {
+  try {
+    const inv = await Invoice.findByIdAndDelete(req.params.id)
+    if (!inv) {
+      return res.status(404).json({ error: 'Invoice not found' })
+    }
+    res.json({ success: true, message: 'Invoice deleted successfully' })
+  } catch (error) {
+    console.error('Error deleting invoice:', error)
+    res.status(500).json({ error: 'Failed to delete invoice' })
+  }
 })
 
 const port = Number(process.env.PORT || 4000)
 app.listen(port, () => console.log(`API listening on ${port}`))
-
-
