@@ -84,7 +84,7 @@ export function InvoicePrint() {
             <th style={{ border: '1px solid #000', padding: 4, textAlign: 'center', fontWeight: 700, fontSize: 10, backgroundColor: '#f0f0f0' }}>Sl No.</th>
             <th style={{ border: '1px solid #000', padding: 4, textAlign: 'left', fontWeight: 700, fontSize: 10, backgroundColor: '#f0f0f0' }}>Description Of Goods</th>
             <th style={{ border: '1px solid #000', padding: 4, textAlign: 'center', fontWeight: 700, fontSize: 10, backgroundColor: '#f0f0f0' }}>HSN/SAC</th>
-            <th style={{ border: '1px solid #000', padding: 4, textAlign: 'center', fontWeight: 700, fontSize: 10, backgroundColor: '#f0f0f0' }}>Quantity (Piece)</th>
+            <th style={{ border: '1px solid #000', padding: 4, textAlign: 'center', fontWeight: 700, fontSize: 10, backgroundColor: '#f0f0f0' }}>Quantity</th>
             <th style={{ border: '1px solid #000', padding: 4, textAlign: 'right', fontWeight: 700, fontSize: 10, backgroundColor: '#f0f0f0' }}>Rate</th>
             <th style={{ border: '1px solid #000', padding: 4, textAlign: 'center', fontWeight: 700, fontSize: 10, backgroundColor: '#f0f0f0' }}>Per</th>
             <th style={{ border: '1px solid #000', padding: 4, textAlign: 'right', fontWeight: 700, fontSize: 10, backgroundColor: '#f0f0f0' }}>Amount</th>

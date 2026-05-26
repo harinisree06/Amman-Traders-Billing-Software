@@ -260,7 +260,7 @@ export function App() {
               <th>Sl No.</th>
               <th>Description Of Goods</th>
               <th>HSN/SAC</th>
-              <th>Quantity (Piece)</th>
+              <th>Quantity</th>
               <th>Rate</th>
               <th>Per</th>
               <th className="right">Amount</th>
@@ -287,10 +287,15 @@ export function App() {
                   const v = Number(e.target.value || 0)
                   set({ items: items.map((row, idx)=> idx===i? {...row, rate:v}: row) })
                 }} /></td>
-                <td><input value={it.per} onChange={(e)=>{
-                  const v = e.target.value
-                  set({ items: items.map((row, idx)=> idx===i? {...row, per:v}: row) })
-                }} /></td>
+                <td>
+                  <select value={it.per} onChange={(e)=>{
+                    const v = e.target.value
+                    set({ items: items.map((row, idx)=> idx===i? {...row, per:v}: row) })
+                  }}>
+                    <option value="Piece">Piece</option>
+                    <option value="Running Metre">Running Metre</option>
+                  </select>
+                </td>
                 <td className="right">{currency(it.quantity * it.rate)}</td>
                 <td className="no-print"><button className="btn secondary" onClick={()=>removeItem(i)}>Remove</button></td>
               </tr>
